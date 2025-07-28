@@ -51,3 +51,9 @@ export type PaymentData = {
   signature: string;
   version: string;
 } 
+
+export type FullPaymentData = {
+  paymentData: PaymentData;
+  transactionIdentifier: any;
+  paymentMethod: any;
+}

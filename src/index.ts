@@ -1,4 +1,4 @@
-import { MerchantCapability, PaymentNetwork, CompleteStatus, PaymentData } from "./ExpoApplePay.types";
+import { MerchantCapability, PaymentNetwork, CompleteStatus, PaymentData, FullPaymentData, } from "./ExpoApplePay.types";
 import ExpoApplePayModule from "./ExpoApplePayModule";
 
 export default {
@@ -12,7 +12,7 @@ export default {
       label: string;
       amount: number;
     }[];
-  }): Promise<PaymentData> => {
+  }): Promise<FullPaymentData> => {
     return ExpoApplePayModule.show({
       ...data,
       paymentSummaryItems: data.paymentSummaryItems.map((item) => ({
