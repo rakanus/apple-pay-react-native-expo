@@ -151,27 +151,98 @@ extension PaymentHandler: PKPaymentAuthorizationControllerDelegate {
     func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController, didAuthorizePayment payment: PKPayment, handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
         handleCompletion = completion
         do {
-            // payment.token.paymentData is empty on simulator
-            // payment.token is the full payment data
-            var json: [String : Any]? = try JSONSerialization.jsonObject(with: payment.token, options: []) as? [String: Any] 
-            if let paymentNetwork = payment.token.paymentMethod.network?.rawValue {
-                json!["paymentNetwork"] = paymentNetwork
-            } else {
-                print("Payment network is nil")
-            } 
-            // Serialize the dictionary back to JSON data
-            var updatedData: Data = try JSONSerialization.data(withJSONObject: json, options: [])
+            // Create a comprehensive token object with all available information
+            var tokenData: [String: Any] = [:]
             
-            // Resolve the promise with the updated JSON data
-            let appendedJson = try JSONSerialization.jsonObject(with: updatedData, options: []) 
-            promise?.resolve(appendedJson)
+            // Payment data (encrypted payment information)
+            var paymentDataJson: [String: Any]? = nil
+            if !payment.token.paymentData.isEmpty {
+                paymentDataJson = try JSONSerialization.jsonObject(with: payment.token.paymentData, options: []) as? [String: Any]
+            }
+            tokenData["paymentData"] = paymentDataJson
+            
+            // Transaction identifier
+            tokenData["transactionIdentifier"] = payment.token.transactionIdentifier
+            
+            // Payment method information
+            var paymentMethodInfo: [String: Any] = [:]
+            
+            if let paymentNetwork = payment.token.paymentMethod.network?.rawValue {
+                paymentMethodInfo["network"] = paymentNetwork
+            }
+            
+            paymentMethodInfo["type"] = payment.token.paymentMethod.type.rawValue
+            
+            if let displayName = payment.token.paymentMethod.displayName {
+                paymentMethodInfo["displayName"] = displayName
+            }
+            
+            // Add secure element pass info if available (iOS 13.4+)
+            if #available(iOS 13.4, *) {
+                if let secureElementPass = payment.token.paymentMethod.secureElementPass {
+                    var passInfo: [String: Any] = [:]
+                    passInfo["primaryAccountIdentifier"] = secureElementPass.primaryAccountIdentifier
+                    passInfo["primaryAccountNumberSuffix"] = secureElementPass.primaryAccountNumberSuffix
+                    passInfo["deviceAccountIdentifier"] = secureElementPass.deviceAccountIdentifier
+                    passInfo["deviceAccountNumberSuffix"] = secureElementPass.deviceAccountNumberSuffix
+                    paymentMethodInfo["secureElementPass"] = passInfo
+                }
+            }
+            
+            tokenData["paymentMethod"] = paymentMethodInfo
+            
+            // Add billing and shipping contact if available
+            if let billingContact = payment.billingContact {
+                var billingInfo: [String: Any] = [:]
+                if let name = billingContact.name {
+                    billingInfo["name"] = [
+                        "givenName": name.givenName ?? "",
+                        "familyName": name.familyName ?? ""
+                    ]
+                }
+                if let postalAddress = billingContact.postalAddress {
+                    billingInfo["postalAddress"] = [
+                        "street": postalAddress.street,
+                        "city": postalAddress.city,
+                        "state": postalAddress.state,
+                        "postalCode": postalAddress.postalCode,
+                        "country": postalAddress.country,
+                        "countryCode": postalAddress.isoCountryCode
+                    ]
+                }
+                tokenData["billingContact"] = billingInfo
+            }
+            
+            if let shippingContact = payment.shippingContact {
+                var shippingInfo: [String: Any] = [:]
+                if let name = shippingContact.name {
+                    shippingInfo["name"] = [
+                        "givenName": name.givenName ?? "",
+                        "familyName": name.familyName ?? ""
+                    ]
+                }
+                if let postalAddress = shippingContact.postalAddress {
+                    shippingInfo["postalAddress"] = [
+                        "street": postalAddress.street,
+                        "city": postalAddress.city,
+                        "state": postalAddress.state,
+                        "postalCode": postalAddress.postalCode,
+                        "country": postalAddress.country,
+                        "countryCode": postalAddress.isoCountryCode
+                    ]
+                }
+                tokenData["shippingContact"] = shippingInfo
+            }
+            
+            // Resolve the promise with the complete token data
+            promise?.resolve(tokenData)
             promise = nil
         } catch {
-            promise?.reject("payment_data_json", "failed to parse")
+            promise?.reject("payment_token_error", "Failed to process payment token: \(error.localizedDescription)")
             promise = nil
         }
     }
-    
+
     public func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
         controller.dismiss()
         promise?.reject("dismiss", "closed")
